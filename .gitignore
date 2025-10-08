@@ -1,0 +1,27 @@
+# Local .terraform directories and files
+**/.terraform/*
+.terraform*
+
+!.terraformrc
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# own secret vars store terraform.
+personal.auto.tfvars
+*.personal.auto.tfvars
+
+
+.idea
+*.env
+*vargant
+
+ansible/venv*
+ansible/.venv*
+*.ansible
+
+
+
+
+

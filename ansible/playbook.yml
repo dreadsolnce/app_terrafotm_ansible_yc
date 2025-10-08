@@ -1,0 +1,69 @@
+---
+- name: control-node
+  hosts: group_control
+  gather_facts: true
+  tasks:
+    - name: Инициализируем кластер
+      community.docker.docker_swarm:
+        state: present
+        advertise_addr: "{{ ansible_default_ipv4.address }}"
+
+    - name: Получаем токен для подключения worker nodes
+      ansible.builtin.shell: docker swarm join-token -q worker
+      register: manager_token
+
+    - name: Создаем файл из шаблона
+      ansible.builtin.template:
+        src: "{{ inventory_dir }}/template/package.j2"
+        dest: "{{ inventory_dir }}/package.json"
+      vars:
+        ipserver: "{{ ansible_default_ipv4.address }}"
+        token: "{{ manager_token.stdout }}"
+      delegate_to: localhost
+
+- name: managed-node
+  hosts: group_managed
+  gather_facts: true
+  tasks:
+    - name: Загружаем переменные из файла
+      ansible.builtin.include_vars:
+        file: "{{ inventory_dir }}/package.json"
+        name: control_node_vars
+
+    - name: debug
+      debug:
+        var: control_node_vars['ipserver']
+
+    - name: Инициализируем ноду в кластере
+      ansible.builtin.shell:
+        cmd: docker swarm join --token "{{ control_node_vars['token'] }}" "{{ control_node_vars['ipserver'] }}":2377
+
+- name: Copy app
+  hosts: group_control
+  tasks:
+    - name: Копируем приложение на control-node
+      ansible.builtin.copy:
+        src: ../app    # Укажите путь к вашей локальной папке
+        dest: "{{ ansible_env.HOME }}"                       # Укажите путь на удаленном сервере
+        owner: ubuntu                     # Опционально: Владелец папки на удаленном сервере
+        group: ubuntu                     # Опционально: Группа папки на удаленном сервере
+        mode: '0755'                      # Опционально: Права доступа (например, 755)
+      tags:
+        - tag1
+    - name: Деплой приложения
+      ansible.builtin.shell: |
+        cd app
+        docker stack deploy -c compose.yaml my
+      register: result_deploy
+
+    - name: Статус деплоя
+      ansible.builtin.debug:
+        var: result_deploy['stdout_lines']
+
+#- name: Сбилдить docker образ
+#  docker build -f ./Dockerfile.python -t app:1.0.0 .
+#    - name: Состояние кластера
+#      debug:
+#        msg: "Состояние кластера: {{ state_cluster }}"
+
+
